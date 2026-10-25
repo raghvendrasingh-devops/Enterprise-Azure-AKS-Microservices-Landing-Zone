@@ -1,0 +1,52 @@
+name: "Enterprise AKS Landing Zone CI/CD Pipeline"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint-terraform:
+    name: "01. Lint Terraform"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+      - run: terraform fmt -check -recursive
+
+  validate-k8s-manifests:
+    name: "02. Validate K8s Manifests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML Syntax
+        run: |
+          python3 -c "import yaml, glob; [yaml.safe_load(open(f)) for f in glob.glob('k8s/**/*.yaml', recursive=True)]"
+
+  security-sast:
+    name: "03. Checkov Security Scan"
+    needs: [lint-terraform, validate-k8s-manifests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform,kubernetes
+          soft_fail: true
+
+  terraform-plan:
+    name: "04. Terraform Plan Dry-Run"
+    needs: [security-sast]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+      - working-directory: terraform/environments/prod
+        run: |
+          terraform init -backend=false
+          terraform validate

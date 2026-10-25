@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-and-allow-ingress
+  namespace: enterprise-workloads
+spec:
+  podSelector:
+    matchLabels:
+      app: core-microservice-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow inbound traffic only from Ingress Controller pods on port 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-system
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Allow DNS resolution within cluster
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow outbound traffic to Azure Key Vault & DB Private Endpoints
+    - to:
+        - ipBlock:
+            cidr: 172.16.57.0/24 # Private Endpoint Subnet
